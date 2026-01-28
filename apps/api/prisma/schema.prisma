@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  OPERATOR
+  CLIENT
+}
+
+enum QueueEntryStatus {
+  WAITING
+  CALLED
+  SERVED
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  email        String   @unique
+  passwordHash String
+  role         Role
+
+  // Admin cria estabelecimentos; operador pertence a um estabelecimento
+  establishmentsOwned Establishment[] @relation("OwnerEstablishments")
+  establishmentId     String?         @db.Uuid
+  establishment       Establishment?  @relation("EstablishmentUsers", fields: [establishmentId], references: [id])
+
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+  queueEntries  QueueEntry[] @relation("ClientQueueEntries")
+  serviceSessions ServiceSession[] @relation("OperatorSessions")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tokenHash String
+  revokedAt DateTime?
+  expiresAt DateTime
+
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Establishment {
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name      String
+
+  ownerId String @db.Uuid
+  owner   User   @relation("OwnerEstablishments", fields: [ownerId], references: [id], onDelete: Restrict)
+
+  users  User[]  @relation("EstablishmentUsers")
+  queues Queue[]
+}
+
+model Queue {
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  establishmentId String @db.Uuid
+  establishment   Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+
+  name             String
+  type             String
+  avgServiceTimeMin Int
+  isOpen           Boolean @default(true)
+
+  publicSlug String @unique
+
+  entries   QueueEntry[]
+  sessions  ServiceSession[]
+  notifications Notification[]
+
+  @@index([establishmentId])
+}
+
+model QueueEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  queueId String @db.Uuid
+  queue   Queue  @relation(fields: [queueId], references: [id], onDelete: Cascade)
+
+  // Cliente pode estar autenticado (CLIENT) ou entrar "anônimo" via link/QR
+  clientUserId String? @db.Uuid
+  clientUser   User?   @relation("ClientQueueEntries", fields: [clientUserId], references: [id], onDelete: SetNull)
+
+  clientName String?
+
+  status QueueEntryStatus @default(WAITING)
+  position Int
+
+  calledAt  DateTime?
+  servedAt  DateTime?
+  cancelledAt DateTime?
+
+  sessions ServiceSession[]
+
+  @@index([queueId, status])
+  @@index([queueId, position])
+}
+
+model ServiceSession {
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  queueId String @db.Uuid
+  queue   Queue  @relation(fields: [queueId], references: [id], onDelete: Cascade)
+
+  entryId String @db.Uuid
+  entry   QueueEntry @relation(fields: [entryId], references: [id], onDelete: Restrict)
+
+  operatorId String? @db.Uuid
+  operator   User?   @relation("OperatorSessions", fields: [operatorId], references: [id], onDelete: SetNull)
+
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+
+  @@index([queueId])
+  @@index([entryId])
+}
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String? @db.Uuid
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  queueId String? @db.Uuid
+  queue   Queue?  @relation(fields: [queueId], references: [id], onDelete: SetNull)
+
+  type    String
+  title   String
+  message String
+  readAt  DateTime?
+
+  @@index([userId])
+  @@index([queueId])
+}
+

@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Fila Zero",
+    "slug": "fila-zero",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "platforms": ["ios", "android"],
+    "sdkVersion": "52.0.0",
+    "assetBundlePatterns": ["**/*"]
+  }
+}
+
